@@ -1,0 +1,65 @@
+plugins {
+    id 'application'
+    id 'org.graalvm.buildtools.native' version '1.1.9'
+}
+
+version = '1.0.0'
+group = 'io.github.rjaros87'
+
+repositories {
+    mavenCentral()
+}
+
+java {
+    sourceCompatibility = JavaVersion.toVersion('25')
+    targetCompatibility = JavaVersion.toVersion('25')
+}
+
+dependencies {
+    // Generates META-INF/native-image/**/reflect-config.json for every class
+    // referenced by a picocli @Command/@Option/@Mixin (constructors, fields).
+    // Without this, native-image has no reflection metadata for e.g.
+    // LifecycleCommand's no-arg constructor, and picocli fails at runtime with
+    // "Cannot instantiate ...: the class has no constructor". This is
+    // independent of any DI framework - plain picocli needs it too.
+    annotationProcessor 'info.picocli:picocli-codegen:4.7.7'
+
+    implementation 'info.picocli:picocli:4.7.7'
+
+    testImplementation platform('org.junit:junit-bom:6.1.2')
+    testImplementation 'org.junit.jupiter:junit-jupiter'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+
+application {
+    mainClass = 'io.github.rjaros87.lifecycle.LifecycleCommand'
+}
+
+tasks.named('test') {
+    useJUnitPlatform()
+}
+
+// Required by picocli-codegen: tells it where/how to group the generated
+// native-image config files under META-INF/native-image/<project>/.
+compileJava {
+    options.compilerArgs += ["-Aproject=${project.group}/${project.name}"]
+}
+
+// GraalVM Native Image build configuration.
+// --static --libc=musl produces a fully static executable, so it can be
+// copied into ANY distroless image (e.g. gcr.io/distroless/static)
+// without needing glibc in the target layer.
+graalvmNative {
+    binaries {
+        main {
+            imageName = 'lifecycle'
+            mainClass = 'io.github.rjaros87.lifecycle.LifecycleCommand'
+            buildArgs.addAll(
+                '--no-fallback',
+                '--static',
+                '--libc=musl',
+                '--enable-url-protocols=http'
+            )
+        }
+    }
+}

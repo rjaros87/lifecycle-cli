@@ -1,0 +1,94 @@
+name: Release
+
+# Runs when a GitHub Release is published, or when a version tag is pushed
+# directly (in which case action-gh-release below creates the release for you).
+on:
+  release:
+    types: [published]
+  push:
+    tags:
+      - 'v*.*.*'
+
+permissions:
+  contents: write   # to attach binaries to the GitHub Release
+
+jobs:
+  # --------------------------------------------------------------------
+  # Gate: nothing below runs unless the unit tests pass. Runs once on
+  # amd64 - no need to duplicate this per architecture.
+  # --------------------------------------------------------------------
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up JDK 25
+        uses: actions/setup-java@v5
+        with:
+          distribution: 'temurin'
+          java-version: '25'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.14.5'
+
+      - name: Run unit tests
+        run: gradle test --no-daemon
+
+  # --------------------------------------------------------------------
+  # Native binaries (linux/amd64 + linux/arm64), attached to the Release.
+  # No Docker image is built or published here at all - just the raw
+  # native-image executables. native-image does NOT cross-compile, so
+  # each architecture is built on a real runner for that architecture
+  # (no QEMU emulation here).
+  # --------------------------------------------------------------------
+  build-binary:
+    needs: test
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            arch: amd64
+          - os: ubuntu-24.04-arm
+            arch: arm64
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up GraalVM
+        uses: graalvm/setup-graalvm@v1
+        with:
+          java-version: '25'
+          distribution: 'graalvm-community'
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          native-image-musl: 'true'
+          cache: 'gradle'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.14.5'
+
+      - name: Build native binary
+        run: gradle nativeCompile --no-daemon
+
+      - name: Package binary
+        run: |
+          mkdir -p dist
+          cp build/native/nativeCompile/lifecycle dist/lifecycle
+          tar -czf lifecycle-linux-${{ matrix.arch }}.tar.gz -C dist lifecycle
+
+      - name: Smoke test
+        run: |
+          ./dist/lifecycle --help
+          ./dist/lifecycle health --help
+
+      - name: Upload binary to the GitHub Release
+        uses: softprops/action-gh-release@v3
+        with:
+          files: lifecycle-linux-${{ matrix.arch }}.tar.gz
+          generate_release_notes: true
