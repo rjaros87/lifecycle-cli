@@ -65,7 +65,7 @@ jobs:
           java-version: '25'
           distribution: 'graalvm-community'
           github-token: ${{ secrets.GITHUB_TOKEN }}
-          native-image-musl: 'true'
+          native-image-musl: ${{ matrix.arch == 'amd64' && 'true' || 'false' }}
           cache: 'gradle'
 
       - name: Set up Gradle

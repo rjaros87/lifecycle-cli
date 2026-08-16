@@ -168,6 +168,12 @@ python scripts/health_stub.py
   and `linux/arm64` (built on real arm64 runners - `native-image` doesn't
   cross-compile), uploaded as Release assets.
 
+### Container Deployment
+
+The project produces native binaries for two architectures:
+* **Linux amd64**: Statically linked (using `musl`). Can be used in `distroless/static` images.
+* **Linux arm64**: Dynamically linked (using `glibc`) - see [issue](https://github.com/graalvm/setup-graalvm/issues/154#issuecomment-2708986481). Requires an image with `glibc` (e.g., `distroless/base`, `chainguard/glibc-dynamic`, or `debian`). 
+
 ## Project structure
 
 ```

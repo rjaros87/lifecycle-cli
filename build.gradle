@@ -49,17 +49,24 @@ compileJava {
 // --static --libc=musl produces a fully static executable, so it can be
 // copied into ANY distroless image (e.g. gcr.io/distroless/static)
 // without needing glibc in the target layer.
+// GraalVM Native Image build configuration.
 graalvmNative {
     binaries {
         main {
             imageName = 'lifecycle'
             mainClass = 'io.github.rjaros87.lifecycle.LifecycleCommand'
-            buildArgs.addAll(
+            def isAmd64 = System.getProperty("os.arch") in ["amd64", "x86_64"]
+            
+            def buildArgsList = [
                 '--no-fallback',
-                '--static',
-                '--libc=musl',
                 '--enable-url-protocols=http'
-            )
+            ]
+            
+            if (isAmd64) {
+                buildArgsList.addAll('--static', '--libc=musl')
+            }
+            
+            buildArgs.addAll(buildArgsList)
         }
     }
 }
