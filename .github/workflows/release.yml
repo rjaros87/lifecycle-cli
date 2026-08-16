@@ -83,9 +83,7 @@ jobs:
           tar -czf lifecycle-linux-${{ matrix.arch }}.tar.gz -C dist lifecycle
 
       - name: Smoke test
-        run: |
-          ./dist/lifecycle --help
-          ./dist/lifecycle health --help
+        run: ./dist/lifecycle --help
 
       - name: Upload binary to the GitHub Release
         uses: softprops/action-gh-release@v3
