@@ -1,0 +1,120 @@
+# Example container fragment for a Deployment/StatefulSet.
+# Assumes /usr/local/bin/lifecycle has been copied into the app image
+# (see README.md, "Using it inside your application image").
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: example-app
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: example-app
+  template:
+    metadata:
+      labels:
+        app: example-app
+    spec:
+      terminationGracePeriodSeconds: 30
+      containers:
+        - name: app
+          image: ghcr.io/your-org/example-app:latest
+          ports:
+            - containerPort: 8080
+              name: http
+            - containerPort: 8082
+              name: management
+
+          lifecycle:
+            preStop:
+              exec:
+                # Wait 5s (connection draining / removal from Endpoints),
+                # then call /shutdown on the management port.
+                command:
+                  - "/usr/local/bin/lifecycle"
+                  - "pre-stop"
+                  - "--port=8082"
+                  - "--wait=5"
+
+          livenessProbe:
+            exec:
+              command:
+                - "/usr/local/bin/lifecycle"
+                - "health"
+                - "--port=8082"
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            failureThreshold: 3
+
+          readinessProbe:
+            exec:
+              command:
+                - "/usr/local/bin/lifecycle"
+                - "health"
+                - "--port=8082"
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            failureThreshold: 3
+---
+# Variant for apps whose graceful shutdown can legitimately take a long
+# time (e.g. waiting for in-flight jobs to finish, or for connections to
+# be drained/closed manually) - up to ~15 minutes in this example.
+#
+# Two things both have to agree, or this will NOT work as intended:
+#   1. --timeout on the lifecycle CLI (the HTTP request/response wait)
+#   2. terminationGracePeriodSeconds on the pod (the Kubernetes-level
+#      deadline for the WHOLE preStop hook + container shutdown)
+#
+# If you only bump --timeout and leave terminationGracePeriodSeconds at
+# its default (30s), Kubernetes will SIGKILL the container - and this
+# preStop process along with it - after 30 seconds regardless of what
+# --timeout says. Give terminationGracePeriodSeconds comfortable headroom
+# above your longest expected shutdown.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: example-app-slow-shutdown
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: example-app-slow-shutdown
+  template:
+    metadata:
+      labels:
+        app: example-app-slow-shutdown
+    spec:
+      # 15 minutes worst case + a couple of minutes of buffer for the
+      # preStop wait, HTTP overhead, and the container's own shutdown.
+      terminationGracePeriodSeconds: 960
+      containers:
+        - name: app
+          image: ghcr.io/your-org/example-app:latest
+          ports:
+            - containerPort: 8080
+              name: http
+            - containerPort: 8082
+              name: management
+
+          lifecycle:
+            preStop:
+              exec:
+                # --timeout here must cover the full wait for /shutdown to
+                # respond, not just the connection - the server is expected
+                # to hold the connection open while it drains.
+                command:
+                  - "/usr/local/bin/lifecycle"
+                  - "pre-stop"
+                  - "--port=8082"
+                  - "--wait=5"
+                  - "--timeout=900"
+
+          livenessProbe:
+            exec:
+              command:
+                - "/usr/local/bin/lifecycle"
+                - "health"
+                - "--port=8082"
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            failureThreshold: 3
