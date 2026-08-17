@@ -82,7 +82,7 @@ jobs:
         run: |
           mkdir -p dist
           cp build/native/nativeCompile/lifecycle dist/lifecycle
-          cp build/native/nativeCompile/lifecycle dist/lifecycle-${{ matrix.arch }}
+          cp build/native/nativeCompile/lifecycle dist/lifecycle-linux-${{ matrix.arch }}
           tar -czf lifecycle-linux-${{ matrix.arch }}.tar.gz -C dist lifecycle
 
       - name: Smoke test
