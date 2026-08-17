@@ -57,16 +57,24 @@ graalvmNative {
             mainClass = 'io.github.rjaros87.lifecycle.LifecycleCommand'
             def isAmd64 = System.getProperty("os.arch") in ["amd64", "x86_64"]
             
-            def buildArgsList = [
+            def arch = System.getProperty('os.arch')
+            def isArm = arch == 'aarch64' || arch == 'arm64'
+        
+            // amd64: fully static (musl) - zero runtime dependencies, works on
+            // literally any base image, including FROM scratch.
+            // arm64: GraalVM's musl toolchain is documented as Linux-AMD64-only
+            // (and GitHub's arm64 runner provisioning for it is currently broken
+            // anyway - see conversation history / CI logs). Fall back to
+            // --static-nolibc ("mostly static": everything statically linked
+            // except libc, dynamically linked against the system's glibc).
+            // This needs a glibc-based target image for the arm64 binary
+            // specifically (Chainguard/Wolfi, gcr.io/distroless/base-debian12 -
+            // NOT scratch, NOT a musl-based image like Alpine).
+            buildArgs.addAll(
                 '--no-fallback',
                 '--enable-url-protocols=http'
-            ]
-            
-            if (isAmd64) {
-                buildArgsList.addAll('--static', '--libc=musl')
-            }
-            
-            buildArgs.addAll(buildArgsList)
+            )
+            buildArgs.addAll(isArm ? ['--static-nolibc'] : ['--static', '--libc=musl'])
         }
     }
 }
