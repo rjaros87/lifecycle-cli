@@ -52,8 +52,10 @@ jobs:
         include:
           - os: ubuntu-latest
             arch: amd64
+            musl: 'true'
           - os: ubuntu-24.04-arm
             arch: arm64
+            musl: 'false'
     runs-on: ${{ matrix.os }}
     steps:
       - name: Checkout
@@ -65,7 +67,7 @@ jobs:
           java-version: '25'
           distribution: 'graalvm-community'
           github-token: ${{ secrets.GITHUB_TOKEN }}
-          native-image-musl: ${{ matrix.arch == 'amd64' && 'true' || 'false' }}
+          native-image-musl: ${{ matrix.musl }}
           cache: 'gradle'
 
       - name: Set up Gradle
