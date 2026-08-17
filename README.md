@@ -40,7 +40,15 @@ static binary with no dependencies, callable from `exec` in `preStop`,
 | `lifecycle shutdown`   | POST   | `/shutdown`   | manually trigger graceful shutdown           |
 | `lifecycle pre-stop`   | POST   | `/shutdown`   | `lifecycle.preStop` hook (wait + shutdown)   |
 
+Each command defaults to the HTTP method Micronaut's built-in endpoint
+expects (`GET` for `/health`, `POST` for `/shutdown` - it's annotated
+`@Write`, since killing the process is a side effect, not a safe `GET`).
+Override with `--method` if your target uses something else, e.g. a
+custom endpoint that accepts `GET` for shutdown too:
+
 ```bash
+lifecycle shutdown --port 8082 --method GET
+lifecycle pre-stop --port 8082 --method GET --wait 5
 lifecycle health   --host 127.0.0.1 --port 8082 --path /health
 lifecycle shutdown --host 127.0.0.1 --port 8082 --path /shutdown
 lifecycle pre-stop --port 8082 --wait 5 --shutdown-path /shutdown
@@ -100,11 +108,13 @@ gradle nativeCompile                                        # native binary (nee
 gradle test
 ```
 
-> No Gradle Wrapper is checked in (`gradle-wrapper.jar` is a binary file).
-> Generate it yourself with `gradle wrapper --gradle-version 8.14.5`, or use
-> a system-installed `gradle`. CI uses `gradle/actions/setup-gradle`, so
-> it doesn't need the wrapper either.
-
+> Verified working on Gradle **8.14.5** running directly under JDK 25
+> (earlier Gradle 8.x releases may not parse JDK 25 bytecode correctly -
+> if you hit `Unsupported class file major version`, update Gradle).
+> Gradle 9.x is deliberately avoided for now: `org.graalvm.buildtools.native`
+> (as of 1.1.9) isn't yet compatible with it (Gradle 9.0 removed
+> `org.gradle.util.VersionNumber`, which the plugin still references).
+> 
 ## Docker
 
 ```bash
@@ -123,11 +133,32 @@ pull the binary out and run it directly on the host.
 
 ## Using it in your own application image
 
-This repo doesn't publish a Docker image - only raw binaries, attached to
-GitHub Releases. To use it in your own distroless app image:
+This repo doesn't publish a Docker image - only raw binaries and
+`.tar.gz` archives, both attached to GitHub Releases. Pick whichever
+suits your Dockerfile better.
+
+### Option A: `ADD` a raw binary directly (no `RUN`, no download step)
+
+```dockerfile
+ARG LIFECYCLE_VERSION=v1.0.0
+ADD --chmod=755 https://github.com/rjaros87/lifecycle-cli/releases/download/${LIFECYCLE_VERSION}/lifecycle-linux-amd64 /usr/local/bin/lifecycle
+
+FROM gcr.io/distroless/java25-debian12
+COPY --from=0 /usr/local/bin/lifecycle /usr/local/bin/lifecycle
+COPY target/your-app.jar /app.jar
+ENTRYPOINT ["java", "-jar", "/app.jar"]
+```
+
+Docker's `ADD` fetches the file and sets its permissions in one layer -
+no `curl`/`tar`/`chmod` needed. Note: `ADD` from a remote URL does
+**not** auto-extract archives (that only happens for local tarballs in
+the build context), so this only works cleanly with the raw binary, not
+the `.tar.gz`.
+
+### Option B: download and extract manually (e.g. in CI, before `docker build`)
 
 ```bash
-gh release download <tag> --repo <owner>/lifecycle-cli --pattern '*.tar.gz'
+gh release download <tag> --repo rjaros87/lifecycle-cli --pattern '*.tar.gz'
 tar -xzf lifecycle-linux-amd64.tar.gz
 ```
 
@@ -137,6 +168,14 @@ COPY lifecycle /usr/local/bin/lifecycle
 COPY target/your-app.jar /app.jar
 ENTRYPOINT ["java", "-jar", "/app.jar"]
 ```
+
+### Pick the right base image for the architecture
+
+`amd64` and `arm64` binaries have **different runtime requirements** -
+see "Container Deployment" above. `distroless/static` only works for
+`amd64`; for `arm64` (or a multi-arch image), use a glibc-providing base
+like `gcr.io/distroless/base-debian12` or `chainguard/glibc-dynamic`
+instead, and swap the binary/tag per `TARGETARCH` if you build multi-arch.
 
 See `k8s/example-deployment.yaml` for the matching pod spec.
 
