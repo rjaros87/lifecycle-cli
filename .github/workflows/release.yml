@@ -82,6 +82,7 @@ jobs:
         run: |
           mkdir -p dist
           cp build/native/nativeCompile/lifecycle dist/lifecycle
+          cp build/native/nativeCompile/lifecycle dist/lifecycle-${{ matrix.arch }}
           tar -czf lifecycle-linux-${{ matrix.arch }}.tar.gz -C dist lifecycle
 
       - name: Smoke test
@@ -91,6 +92,6 @@ jobs:
         uses: softprops/action-gh-release@v3
         with:
           files: |
-            lifecycle-linux-${{ matrix.arch }}
+            dist/lifecycle-linux-${{ matrix.arch }}
             lifecycle-linux-${{ matrix.arch }}.tar.gz
           generate_release_notes: true
